@@ -9,8 +9,8 @@ TODO
 ## Gateway data fetching
 
 ```sh
-python -m venv venv
-source venv/bin/activate
+python -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 python fetch-data.py
 ```

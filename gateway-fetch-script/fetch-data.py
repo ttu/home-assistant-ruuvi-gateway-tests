@@ -1,13 +1,32 @@
+from typing import Optional, TypedDict
 import asyncio
+import typing
 import aiohttp
 from ruuvi_decoders import get_decoder
 
 STATION_IP = "10.0.0.21"
 
 
-def parse(data):
+class SensorData(TypedDict):
+    data_format: int
+    humidity: float
+    temperature: float
+    pressure: float
+    acceleration: float
+    acceleration_x: float
+    acceleration_y: float
+    acceleration_z: float
+    battery: int
+    tx_power: Optional[int]
+    movement_counter:  Optional[int]
+    measurement_sequence_number:  Optional[int]
+    mac: Optional[str]
+    rssi: Optional[int]
+
+
+def _parse(data: dict) -> typing.Dict[str, SensorData]:
     data = data["data"]
-    sensor_datas = {}
+    sensor_datas: typing.Dict[str, SensorData] = {}
     for mac in data["tags"]:
         raw = data["tags"][mac]["data"]
 
@@ -17,7 +36,7 @@ def parse(data):
             print("ruuvi company id not found in data")
             continue
 
-        rt = {}
+        rt: SensorData = {}
         rt["rssi"] = data["tags"][mac]["rssi"]
 
         try:
@@ -37,7 +56,7 @@ async def fetchData(ip, pollRate):
         async with session.get('http://'+ip+'/history?time='+str(pollRate), allow_redirects=False) as response:
             if response.status == 200:
                 data = await response.json()
-                return parse(data)
+                return _parse(data)
             else:
                 print("Response status:", response.status)
 
