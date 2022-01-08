@@ -1,12 +1,18 @@
+import json
+import hashlib
+from http import cookies
 from typing import Optional, TypedDict
-import asyncio
 import typing
-import aiohttp
+import asyncio
+from aiohttp.client import ClientSession
 from attr import dataclass
+import aiohttp
 from ruuvi_decoders import get_decoder
 
 STATION_IP = "10.0.0.21"
 POLL_RATE = 30
+USERNAME = "user"
+PASSWORD = "pwd"
 
 
 class SensorData(TypedDict):
@@ -28,11 +34,11 @@ class SensorData(TypedDict):
 
 @dataclass
 class Result:
-    code: int
+    status: int
     payload: any
 
 
-def _parse(data: dict) -> typing.Dict[str, SensorData]:
+def _parse_received_data(data: dict) -> typing.Dict[str, SensorData]:
     data = data["data"]
     sensor_datas: typing.Dict[str, SensorData] = {}
     for mac in data["tags"]:
@@ -59,20 +65,49 @@ def _parse(data: dict) -> typing.Dict[str, SensorData]:
     return sensor_datas
 
 
-async def get_auth_info(session, ip):
-    async with session.get('http://'+ip+'/auth', allow_redirects=False) as response:
+def _parse_value_from_header(header: str, key: str):
+    ch_start = header.index(key) + len(key) + 2
+    ch_end = header.index("\"", ch_start + 1)
+    return header[ch_start:ch_end]
+
+
+def _parse_password(header: str):
+    challenge = _parse_value_from_header(header, "challenge")
+    realm = _parse_value_from_header(header, "realm")
+    password_md5 = hashlib.md5(
+        f'{USERNAME}:{realm}:{PASSWORD}'.encode()).hexdigest()
+    password_sha256 = hashlib.sha256(
+        f'{challenge}:{password_md5}'.encode()).hexdigest()
+    return password_sha256
+
+
+def _parse_session_cookie(header: str):
+    session_cookie = _parse_value_from_header(header, "session_cookie")
+    session_id = _parse_value_from_header(header, "session_id")
+    return {session_cookie: session_id}
+
+
+async def get_auth_info(session: ClientSession, ip, cookies):
+    async with session.get(f'http://{ip}/auth', cookies=cookies) as response:
         if response.status == 401:
             auth_info = response.headers["WWW-Authenticate"]
             return auth_info
         return None
 
 
-async def get_data(session, ip) -> Result:
+async def authorize_user(session: ClientSession, ip, cookies, username, password_encrypted):
+    auth_payload = '{"login":"' + username + \
+        '","password":"' + password_encrypted + '"}'
+    async with session.post(f'http://{ip}/auth', data=auth_payload, cookies=cookies) as response:
+        return Result(response.status, response.content)
+
+
+async def get_data(session, ip, cookies) -> Result:
     try:
-        async with session.get('http://'+ip+'/history?time='+str(POLL_RATE), allow_redirects=False) as response:
+        async with session.get(f'http://{ip}/history?time={POLL_RATE}', cookies=cookies) as response:
             if response.status == 200:
                 data = await response.json()
-                parsed = _parse(data)
+                parsed = _parse_received_data(data)
                 return Result(200, parsed)
             else:
                 return Result(response.status, None)
@@ -83,25 +118,25 @@ async def get_data(session, ip) -> Result:
         return Result(500, None)
 
 
-def parse_value(header: str, key: str):
-    ch_start = header.index(key) + len(key) + 2
-    ch_end = header.index("\"", ch_start + 1)
-    return header[ch_start:ch_end]
-
 async def fetch_data(ip):
+    cookies = {}
     async with aiohttp.ClientSession() as session:
-        result = await get_data(session, ip)
-        print("Response status:", result.code)
-
-        if result.code == 200:
-            return result.payload
-        if (result.code == 302):
-            auth_info = await get_auth_info(session, ip)
-            challenge = parse_value(auth_info, "challenge")
-            realm = parse_value(auth_info, "realm")
-            print(challenge)
-            print(realm)
-            print(auth_info)
+        get_result = await get_data(session, ip, cookies)
+        if get_result.status == 200:
+            return get_result.payload
+        if (get_result.status == 302):
+            auth_info = await get_auth_info(session, ip, cookies)
+            cookies = _parse_session_cookie(auth_info)
+            auth_result = await authorize_user(session, ip, cookies, USERNAME, _parse_password(auth_info))
+            if auth_result.status == 200:
+                get_result = await get_data(session, ip, cookies)
+                return get_result.payload
+            else:
+                print("Auth failed status:", auth_result.status)
+                return None
+        else:
+            print("Fetch failed status:", get_result.status)
+            return None
 
 
 async def main():
