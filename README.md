@@ -1,18 +1,20 @@
 # home-assistant-ruuvi-gateway-tests
 
-Test files and notes for Ruuvi Gateway Home Assistant component
+Test files and notes for Ruuvi Gateway scripts, packages and Home Assistant component. 
+
+Will be eventually moved under [Ruuvi Friends organization](https://github.com/ruuvi-friends).
 
 ## Home Assistant Component
 
 TODO
 
-## Gateway data fetching
+## Gateway data fetching script
 
 ```sh
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-python fetch-data.py
+python fetch_data.py
 ```
 
 ### Get data
@@ -55,3 +57,17 @@ password_sha256 = CryptoJS.SHA256(challenge + ':' + encrypted_password).toString
 next_url = request.getResponseHeader('Ruuvi-prev-url')
 ```
 
+## Gateway package
+
+Ruuvi Gateway package test
+
+https://packaging.python.org/en/latest/tutorials/packaging-projects/
+
+```
+python -m venv .venv
+source .venv/bin/activate
+
+pip install -e /ruuvi_dgateway
+
+python test_package.py
+```
