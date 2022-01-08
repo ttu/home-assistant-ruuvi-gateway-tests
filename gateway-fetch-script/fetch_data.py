@@ -51,7 +51,7 @@ def _parse(data: dict) -> typing.Dict[str, SensorData]:
     return sensor_datas
 
 
-async def fetchData(ip, pollRate):
+async def fetch_data(ip, pollRate):
     async with aiohttp.ClientSession() as session:
         async with session.get('http://'+ip+'/history?time='+str(pollRate), allow_redirects=False) as response:
             if response.status == 200:
@@ -62,7 +62,7 @@ async def fetchData(ip, pollRate):
 
 
 async def main():
-    data = await fetchData(STATION_IP, 30)
+    data = await fetch_data(STATION_IP, 30)
     print(data)
 
 loop = asyncio.get_event_loop()
