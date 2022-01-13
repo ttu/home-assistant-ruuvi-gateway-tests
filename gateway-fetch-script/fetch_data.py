@@ -1,7 +1,5 @@
-import json
 import hashlib
-from http import cookies
-from typing import Optional, TypedDict
+from typing import Generic, Optional, TypeVar, TypedDict
 import typing
 import asyncio
 from aiohttp.client import ClientSession
@@ -13,6 +11,23 @@ STATION_IP = "10.0.0.21"
 POLL_RATE = 30
 USERNAME = "user"
 PASSWORD = "pwd"
+
+
+class SensorPayload(TypedDict):
+    rssi: int
+    timestamp: str
+    data: str
+
+
+class PayloadData(TypedDict):
+    coordinates: any
+    timestamp: str
+    gw_mac: str
+    tags: typing.Dict[str, SensorPayload]
+
+
+class Payload(TypedDict):
+    data: PayloadData
 
 
 class SensorData(TypedDict):
@@ -32,17 +47,22 @@ class SensorData(TypedDict):
     rssi: Optional[int]
 
 
+ParsedDatas = typing.Dict[str, SensorData]
+
+T = TypeVar('T')
+
+
 @dataclass
-class Result:
+class Result(Generic[T]):
     status: int
-    payload: any
+    payload: T
 
 
-def _parse_received_data(data: dict) -> typing.Dict[str, SensorData]:
-    data = data["data"]
-    sensor_datas: typing.Dict[str, SensorData] = {}
-    for mac in data["tags"]:
-        raw = data["tags"][mac]["data"]
+def _parse_received_data(payload: Payload) -> ParsedDatas:
+    data = payload["data"]
+    sensor_datas: ParsedDatas = {}
+    for mac, value in data["tags"].items():
+        raw = value["data"]
 
         try:
             companyIndex = raw.index("FF9904")
@@ -51,7 +71,7 @@ def _parse_received_data(data: dict) -> typing.Dict[str, SensorData]:
             continue
 
         rt: SensorData = {}
-        rt["rssi"] = data["tags"][mac]["rssi"]
+        rt["rssi"] = value["rssi"]
 
         try:
             broadcast_data = raw[companyIndex+6:]
@@ -87,7 +107,7 @@ def _parse_session_cookie(header: str):
     return {session_cookie: session_id}
 
 
-async def get_auth_info(session: ClientSession, ip, cookies):
+async def get_auth_info(session: ClientSession, ip, cookies={}):
     async with session.get(f'http://{ip}/auth', cookies=cookies) as response:
         if response.status == 401:
             auth_info = response.headers["WWW-Authenticate"]
@@ -99,10 +119,10 @@ async def authorize_user(session: ClientSession, ip, cookies, username, password
     auth_payload = '{"login":"' + username + \
         '","password":"' + password_encrypted + '"}'
     async with session.post(f'http://{ip}/auth', data=auth_payload, cookies=cookies) as response:
-        return Result(response.status, response.content)
+        return Result(response.status, None)
 
 
-async def get_data(session, ip, cookies) -> Result:
+async def get_data(session, ip, cookies={}) -> Result[ParsedDatas]:
     try:
         async with session.get(f'http://{ip}/history?time={POLL_RATE}', cookies=cookies) as response:
             if response.status == 200:
@@ -113,19 +133,18 @@ async def get_data(session, ip, cookies) -> Result:
                 return Result(response.status, None)
     except aiohttp.ClientConnectionError as e:
         message = e.args[0]
-        if message is not None and message.code == 302:
+        if hasattr(message, 'code') and message.code == 302:
             return Result(302, None)
         return Result(500, None)
 
 
-async def fetch_data(ip):
-    cookies = {}
+async def fetch_data(ip) -> Optional[ParsedDatas]:
     async with aiohttp.ClientSession() as session:
-        get_result = await get_data(session, ip, cookies)
+        get_result = await get_data(session, ip)
         if get_result.status == 200:
             return get_result.payload
         if (get_result.status == 302):
-            auth_info = await get_auth_info(session, ip, cookies)
+            auth_info = await get_auth_info(session, ip)
             cookies = _parse_session_cookie(auth_info)
             auth_result = await authorize_user(session, ip, cookies, USERNAME, _parse_password(auth_info))
             if auth_result.status == 200:
@@ -141,7 +160,7 @@ async def fetch_data(ip):
 
 async def main():
     data = await fetch_data(STATION_IP)
-    print(data)
+    print(data or "No data")
 
 loop = asyncio.get_event_loop()
 loop.run_until_complete(main())
