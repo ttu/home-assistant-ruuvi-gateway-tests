@@ -8,7 +8,6 @@ import aiohttp
 from ruuvi_decoders import get_decoder
 
 STATION_IP = "10.0.0.21"
-POLL_RATE = 30
 USERNAME = "user"
 PASSWORD = "pwd"
 
@@ -91,11 +90,11 @@ def _parse_value_from_header(header: str, key: str):
     return header[ch_start:ch_end]
 
 
-def _parse_password(header: str):
+def _parse_password(header: str, username: str, password: str):
     challenge = _parse_value_from_header(header, "challenge")
     realm = _parse_value_from_header(header, "realm")
     password_md5 = hashlib.md5(
-        f'{USERNAME}:{realm}:{PASSWORD}'.encode()).hexdigest()
+        f'{username}:{realm}:{password}'.encode()).hexdigest()
     password_sha256 = hashlib.sha256(
         f'{challenge}:{password_md5}'.encode()).hexdigest()
     return password_sha256
@@ -124,7 +123,7 @@ async def authorize_user(session: ClientSession, ip, cookies, username, password
 
 async def get_data(session, ip, cookies={}) -> Result[ParsedDatas]:
     try:
-        async with session.get(f'http://{ip}/history?time={POLL_RATE}', cookies=cookies) as response:
+        async with session.get(f'http://{ip}/history?time=30', cookies=cookies) as response:
             if response.status == 200:
                 data = await response.json()
                 parsed = _parse_received_data(data)
@@ -138,7 +137,7 @@ async def get_data(session, ip, cookies={}) -> Result[ParsedDatas]:
         return Result(500, None)
 
 
-async def fetch_data(ip) -> Optional[ParsedDatas]:
+async def fetch_data(ip, username, password) -> Optional[ParsedDatas]:
     async with aiohttp.ClientSession() as session:
         get_result = await get_data(session, ip)
         if get_result.status == 200:
@@ -146,7 +145,8 @@ async def fetch_data(ip) -> Optional[ParsedDatas]:
         if (get_result.status == 302):
             auth_info = await get_auth_info(session, ip)
             cookies = _parse_session_cookie(auth_info)
-            auth_result = await authorize_user(session, ip, cookies, USERNAME, _parse_password(auth_info))
+            password_encrypted = _parse_password(auth_info, username, password)
+            auth_result = await authorize_user(session, ip, cookies, username, password_encrypted)
             if auth_result.status == 200:
                 get_result = await get_data(session, ip, cookies)
                 return get_result.payload
@@ -159,7 +159,7 @@ async def fetch_data(ip) -> Optional[ParsedDatas]:
 
 
 async def main():
-    data = await fetch_data(STATION_IP)
+    data = await fetch_data(STATION_IP, USERNAME, PASSWORD)
     print(data or "No data")
 
 loop = asyncio.get_event_loop()
