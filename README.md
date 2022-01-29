@@ -10,13 +10,13 @@ TODO
 
 ## Ruuvi Gateway fetch data script
 
-Set ip, username and password to `fetch_data.py` script.
+Set IP, username and password to `fetch_data.py` script
 ```py
 STATION_IP = "10.0.0.21"
-USERNAME = "user"
-PASSWORD = "pwd"
+USERNAME = "username"
+PASSWORD = "password"
 ```
-
+Create virtual env, install requirements and execute script
 ```sh
 python -m venv .venv
 source .venv/bin/activate
