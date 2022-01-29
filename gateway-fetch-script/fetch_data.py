@@ -53,8 +53,9 @@ T = TypeVar('T')
 
 @dataclass
 class Result(Generic[T]):
-    status: int
-    payload: T
+    data: Optional[T]
+    status: Optional[int]
+    ok: bool = True
 
 
 def _parse_received_data(payload: Payload) -> ParsedDatas:
@@ -118,7 +119,7 @@ async def authorize_user(session: ClientSession, ip, cookies, username, password
     auth_payload = '{"login":"' + username + \
         '","password":"' + password_encrypted + '"}'
     async with session.post(f'http://{ip}/auth', data=auth_payload, cookies=cookies) as response:
-        return Result(response.status, None)
+        return Result(None, response.status, response.status == 200)
 
 
 async def get_data(session, ip, cookies={}) -> Result[ParsedDatas]:
@@ -127,34 +128,39 @@ async def get_data(session, ip, cookies={}) -> Result[ParsedDatas]:
             if response.status == 200:
                 data = await response.json()
                 parsed = _parse_received_data(data)
-                return Result(200, parsed)
+                return Result(parsed, 200)
             else:
-                return Result(response.status, None)
+                return Result(None, response.status, False)
     except aiohttp.ClientConnectionError as e:
         message = e.args[0]
         if hasattr(message, 'code') and message.code == 302:
-            return Result(302, None)
-        return Result(500, None)
+            return Result(None, 302, False)
+        return Result(None, 500, False)
 
 
-async def fetch_data(ip, username, password) -> Optional[ParsedDatas]:
+async def fetch_data(ip, username, password) -> Result[Optional[ParsedDatas]]:
     async with aiohttp.ClientSession() as session:
         get_result = await get_data(session, ip)
-        if get_result.status == 200:
-            return get_result.payload
+        if get_result.ok:
+            return get_result.data
+
         if (get_result.status == 302):
             auth_info = await get_auth_info(session, ip)
             cookies = _parse_session_cookie(auth_info)
             password_encrypted = _parse_password(auth_info, username, password)
             auth_result = await authorize_user(session, ip, cookies, username, password_encrypted)
-            if auth_result.status == 200:
+            if auth_result.ok:
                 get_result = await get_data(session, ip, cookies)
-                return get_result.payload
+                if get_result.ok:
+                    return get_result.data
+                else:
+                    print(
+                        f'Fetch failed after authorization status: {get_result.status}')
             else:
-                print("Auth failed status:", auth_result.status)
+                print(f'Auth failed status: {auth_result.status}')
                 return None
         else:
-            print("Fetch failed status:", get_result.status)
+            print(f'Fetch failed status: {get_result.status}')
             return None
 
 

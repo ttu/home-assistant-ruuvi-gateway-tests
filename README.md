@@ -8,14 +8,16 @@ Will be eventually moved under [Ruuvi Friends organization](https://github.com/r
 
 TODO
 
-## Gateway data fetching script
+## Ruuvi Gateway fetch data script
 
 ```sh
 python -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 python fetch_data.py
 ```
+
+
 
 ### Get data
 
