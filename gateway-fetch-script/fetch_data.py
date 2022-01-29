@@ -53,9 +53,19 @@ T = TypeVar('T')
 
 @dataclass
 class Result(Generic[T]):
-    data: Optional[T]
+    data: Optional[T] = None
     status: Optional[int] = None
     ok: bool = True
+
+
+@dataclass
+class Ok(Result):
+    ok: bool = True
+
+
+@dataclass
+class Err(Result):
+    ok: bool = False
 
 
 def _parse_received_data(payload: Payload) -> ParsedDatas:
@@ -111,8 +121,8 @@ async def get_auth_info(session: ClientSession, ip, cookies={}):
     async with session.get(f'http://{ip}/auth', cookies=cookies) as response:
         if response.status == 401:
             auth_info = response.headers["WWW-Authenticate"]
-            return auth_info
-        return None
+            return Ok(auth_info)
+        return Err()
 
 
 async def authorize_user(session: ClientSession, ip, cookies, username, password_encrypted):
@@ -128,24 +138,26 @@ async def get_data(session, ip, cookies={}) -> Result[ParsedDatas]:
             if response.status == 200:
                 data = await response.json()
                 parsed = _parse_received_data(data)
-                return Result(parsed, 200)
+                return Ok(parsed, 200)
             else:
-                return Result(None, response.status, False)
+                return Err(None, response.status)
     except aiohttp.ClientConnectionError as e:
         message = e.args[0]
         if hasattr(message, 'code') and message.code == 302:
-            return Result(None, 302, False)
-        return Result(None, 500, False)
+            return Err(None, 302)
+        return Err(None, 500)
 
 
 async def get_authenticate_cookies(session, ip, username, password):
     auth_info = await get_auth_info(session, ip)
-    cookies = _parse_session_cookie(auth_info)
-    password_encrypted = _parse_password(auth_info, username, password)
+    if not auth_info.ok:
+        return Err()
+    cookies = _parse_session_cookie(auth_info.data)
+    password_encrypted = _parse_password(auth_info.data, username, password)
     auth_result = await authorize_user(session, ip, cookies, username, password_encrypted)
     if not auth_result.ok:
-        return Result(None, auth_result.status, False)
-    return Result(cookies)
+        return Err(None, auth_result.status)
+    return Ok(cookies)
 
 
 async def fetch_data(ip, username, password) -> Result[Optional[ParsedDatas]]:
