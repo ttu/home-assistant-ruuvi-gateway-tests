@@ -77,7 +77,7 @@ def _parse_received_data(payload: Payload) -> ParsedDatas:
         try:
             companyIndex = raw.index("FF9904")
         except ValueError:
-            print("ruuvi company id not found in data")
+            print("Ruuvi company id not found in data")
             continue
 
         rt: SensorData = {}
@@ -88,7 +88,7 @@ def _parse_received_data(payload: Payload) -> ParsedDatas:
             data_format = broadcast_data[0:2]
             rt = get_decoder(int(data_format)).decode_data(broadcast_data)
         except ValueError:
-            print("valid data format data not found in payload")
+            print("Valid data format data not found in payload")
             continue
 
         sensor_datas[mac] = rt
@@ -164,26 +164,24 @@ async def fetch_data(ip, username, password) -> Result[Optional[ParsedDatas]]:
     async with aiohttp.ClientSession() as session:
         get_result = await get_data(session, ip)
         if get_result.ok:
-            return get_result.data
+            return Ok(get_result.data)
         if get_result.status != 302:
-            print(f'Fetch failed: {get_result.status}')
-            return None
+            return Err(f'Fetch failed - {get_result.status}')
 
         cookie_result = await get_authenticate_cookies(session, ip, username, password)
         if not cookie_result.ok:
-            print(f'Auth failed: {cookie_result.status}')
-            return None
+            return Err(f'Authentication failed - {cookie_result.status}')
 
         get_result = await get_data(session, ip, cookie_result.data)
         if get_result.ok:
-            return get_result.data
+            return Ok(get_result.data)
         else:
-            print(f'Fetch failed after authorization: {get_result.status}')
+            return Err(f'Fetch failed after authorization - {get_result.status}')
 
 
 async def main():
-    data = await fetch_data(STATION_IP, USERNAME, PASSWORD)
-    print(data or "No data")
+    fetch = await fetch_data(STATION_IP, USERNAME, PASSWORD)
+    print(fetch.data if fetch.ok else f'Fetch failed: {fetch.data}')
 
 loop = asyncio.get_event_loop()
 loop.run_until_complete(main())
