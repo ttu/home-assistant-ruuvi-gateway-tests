@@ -68,31 +68,34 @@ class Err(Result):
     ok: bool = False
 
 
+def _parse_sensor_payload(mac: str, payload: SensorPayload) -> typing.Tuple[str, SensorData]:
+    raw = payload["data"]
+
+    try:
+        companyIndex = raw.index("FF9904")
+    except ValueError:
+        print("Ruuvi company id not found in data")
+        return [mac, None]
+
+    rt: SensorData = {}
+    rt["rssi"] = payload["rssi"]
+
+    try:
+        broadcast_data = raw[companyIndex+6:]
+        data_format = broadcast_data[0:2]
+        rt = get_decoder(int(data_format)).decode_data(broadcast_data)
+    except ValueError:
+        print("Valid data format data not found in payload")
+        return [mac, None]
+
+    return [mac, rt]
+
+
 def _parse_received_data(payload: Payload) -> ParsedDatas:
     data = payload["data"]
-    sensor_datas: ParsedDatas = {}
-    for mac, value in data["tags"].items():
-        raw = value["data"]
-
-        try:
-            companyIndex = raw.index("FF9904")
-        except ValueError:
-            print("Ruuvi company id not found in data")
-            continue
-
-        rt: SensorData = {}
-        rt["rssi"] = value["rssi"]
-
-        try:
-            broadcast_data = raw[companyIndex+6:]
-            data_format = broadcast_data[0:2]
-            rt = get_decoder(int(data_format)).decode_data(broadcast_data)
-        except ValueError:
-            print("Valid data format data not found in payload")
-            continue
-
-        sensor_datas[mac] = rt
-    return sensor_datas
+    sensor_datas = [_parse_sensor_payload(key, value)
+                    for key, value in data["tags"].items()]
+    return dict(sensor_datas)
 
 
 def _parse_value_from_header(header: str, key: str):
