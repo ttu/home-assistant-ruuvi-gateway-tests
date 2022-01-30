@@ -8,8 +8,8 @@ import aiohttp
 from ruuvi_decoders import get_decoder
 
 STATION_IP = "10.0.0.21"
-USERNAME = "user"
-PASSWORD = "pwd"
+USERNAME = "username"
+PASSWORD = "password"
 
 
 class SensorPayload(TypedDict):
@@ -53,7 +53,7 @@ T = TypeVar('T')
 
 @dataclass
 class Result(Generic[T]):
-    data: Optional[T] = None
+    val: Optional[T] = None
     status: Optional[int] = None
     ok: bool = True
 
@@ -132,7 +132,7 @@ async def authorize_user(session: ClientSession, ip, cookies, username, password
         return Result(None, response.status, response.status == 200)
 
 
-async def get_data(session, ip, cookies={}) -> Result[ParsedDatas]:
+async def get_data(session, ip, cookies={}) -> Result[Optional[ParsedDatas]]:
     try:
         async with session.get(f'http://{ip}/history?time=30', cookies=cookies) as response:
             if response.status == 200:
@@ -149,11 +149,12 @@ async def get_data(session, ip, cookies={}) -> Result[ParsedDatas]:
 
 
 async def get_authenticate_cookies(session, ip, username, password):
-    auth_info = await get_auth_info(session, ip)
-    if not auth_info.ok:
+    auth_info_result = await get_auth_info(session, ip)
+    if not auth_info_result.ok:
         return Err()
-    cookies = _parse_session_cookie(auth_info.data)
-    password_encrypted = _parse_password(auth_info.data, username, password)
+    cookies = _parse_session_cookie(auth_info_result.val)
+    password_encrypted = _parse_password(
+        auth_info_result.val, username, password)
     auth_result = await authorize_user(session, ip, cookies, username, password_encrypted)
     if not auth_result.ok:
         return Err(None, auth_result.status)
@@ -164,7 +165,7 @@ async def fetch_data(ip, username, password) -> Result[Optional[ParsedDatas]]:
     async with aiohttp.ClientSession() as session:
         get_result = await get_data(session, ip)
         if get_result.ok:
-            return Ok(get_result.data)
+            return Ok(get_result.val)
         if get_result.status != 302:
             return Err(f'Fetch failed - {get_result.status}')
 
@@ -172,16 +173,17 @@ async def fetch_data(ip, username, password) -> Result[Optional[ParsedDatas]]:
         if not cookie_result.ok:
             return Err(f'Authentication failed - {cookie_result.status}')
 
-        get_result = await get_data(session, ip, cookie_result.data)
+        get_result = await get_data(session, ip, cookie_result.val)
         if get_result.ok:
-            return Ok(get_result.data)
+            return Ok(get_result.val)
         else:
             return Err(f'Fetch failed after authorization - {get_result.status}')
 
 
 async def main():
-    fetch = await fetch_data(STATION_IP, USERNAME, PASSWORD)
-    print(fetch.data if fetch.ok else f'Fetch failed: {fetch.data}')
+    fetch_result = await fetch_data(STATION_IP, USERNAME, PASSWORD)
+    print(
+        fetch_result.val if fetch_result.ok else f'Fetch failed: {fetch_result.val}')
 
 loop = asyncio.get_event_loop()
 loop.run_until_complete(main())
