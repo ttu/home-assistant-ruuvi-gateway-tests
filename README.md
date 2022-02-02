@@ -20,11 +20,23 @@ Ruuvi Gateway package test
 
 https://packaging.python.org/en/latest/tutorials/packaging-projects/
 
-```
+Install
+
+```sh
 python -m venv .venv
 source .venv/bin/activate
+python -m pip install -e ./ruuvi_gateway
+```
 
-pip install -e /ruuvi_dgateway
+Execute tests
 
-python test_package.py
+```sh
+python setup.py test
+```
+
+
+Use package
+
+```sh
+python fetch_use_package.py
 ```

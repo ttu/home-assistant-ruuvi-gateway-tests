@@ -24,7 +24,13 @@ setuptools.setup(
     packages=setuptools.find_packages(where="src"),
     python_requires=">=3.6",
     install_requires=[
-          'aiohttp',
-          'ruuvi_decoders',
-      ]
+        'aiohttp',
+        'result',
+        'ruuvi_decoders',
+    ],
+    test_suite='nose.collector',
+    tests_require=[
+        'nose',
+        'mock'
+    ],
 )
