@@ -35,8 +35,8 @@ python setup.py test
 ```
 
 
-Use package
+Test package
 
 ```sh
-python fetch_use_package.py
+python example.py
 ```

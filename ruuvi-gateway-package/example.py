@@ -1,8 +1,3 @@
-# Ruuvi Gateway package test
-
-## Example
-
-```py
 import asyncio
 from ruuvi_gateway import gateway, types
 
@@ -25,4 +20,3 @@ async def main():
 
 loop = asyncio.get_event_loop()
 loop.run_until_complete(main())
-```
