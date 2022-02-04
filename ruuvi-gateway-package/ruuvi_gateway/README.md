@@ -4,14 +4,15 @@
 
 ```py
 import asyncio
-from ruuvi_gateway import gateway, types
+from ruuvi_gateway import gateway
+from ruuvi_gateway.types import ParsedDatas
 
 STATION_IP = "10.0.0.21"
 USERNAME = "username"
 PASSWORD = "password"
 
 
-def print_data(data: types.ParsedDatas):
+def print_data(data: ParsedDatas):
     for mac, sensor_data in data.items():
         print(f'{mac}: {sensor_data}')
 
